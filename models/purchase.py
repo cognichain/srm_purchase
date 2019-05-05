@@ -253,9 +253,12 @@ class PurchaseOrder(models.Model):
         if not self.env.get('ir.module.module').sudo().search([('name', '=', module_name), ('state', '=', 'installed')]):
             raise exceptions.ValidationError('请先安装审批流模块！')
         model_id = self.env['ir.model'].search([('model', '=', self._name)]).id
-        approval_strategy_objs = self.env.get('approval.strategy').sudo().search([('model_id', '=', model_id)])
+        approval_strategy_objs = self.env.get('approval.strategy').sudo().search([('model_id', '=', model_id), ('enable', '=', True)])
         if len(approval_strategy_objs) < 1:
-            raise exceptions.ValidationError('请先创建审批策略！')
+            if not self.env.get('approval.strategy').sudo().search([('model_id', '=', model_id)]):
+                raise exceptions.ValidationError('请先创建审批策略！')
+            else:
+                raise exceptions.ValidationError('请先启动审批策略！')
         elif len(approval_strategy_objs) > 1:
             # 如果一个单据存在多个审批策略，先暂时去第一个审批策略。
             approval_strategy_objs = approval_strategy_objs[0]

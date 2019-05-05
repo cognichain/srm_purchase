@@ -103,6 +103,21 @@ class PurchaseCustomerPortal(CustomerPortal):
             'filterby': filterby,
             'default_url': '/my/purchase'
         })
+        delivery_status_dict = {}
+        for each_order in order_ids:
+            if each_order.state in ['cancel']:
+                delivery_status_dict[each_order.id] = '已取消'
+            else:
+                delivery_status = self.check_the_purchase_order_delivery_status(order=each_order)
+                if delivery_status == 'all_delivery':
+                    delivery_status_dict[each_order.id] = '全部发货'
+                elif delivery_status == 'no_delivery':
+                    delivery_status_dict[each_order.id] = '待发货'
+                elif delivery_status == 'partial_delivery':
+                    delivery_status_dict[each_order.id] = '部分发货'
+                else:
+                    delivery_status_dict[each_order.id] = '其他'
+        values.update({'delivery_status_dict': delivery_status_dict})
         return request.render("srm_purchase.portal_my_po", values)
 
     @http.route(['/my/purchase/<int:order_id>'], type='http', auth="user", website=True)

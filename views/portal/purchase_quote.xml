@@ -31,11 +31,21 @@
                                         <span t-field="order_id.date_order"/>
                                     </td>
                                     <td>
-                                        <span t-field="order_id.amount_total"
-                                              t-options='{"widget": "monetary", "display_currency": order_id.currency_id}'/>
+                                        <span t-field="order_id.amount_total" t-options='{"widget": "monetary", "display_currency": order_id.currency_id}'/>
                                     </td>
                                     <td>
-                                        <span t-field="order_id.state"/>
+                                        <t t-if="order_id.state == 'sent'">
+                                            <span>询价中</span>
+                                        </t>
+                                        <t t-elif="order_id.state == 'to approve'">
+                                            <span>审批进行中</span>
+                                        </t>
+                                        <t t-elif="order_id.state == 'cancel'">
+                                            <span>已取消</span>
+                                        </t>
+                                        <t t-else="">
+                                            <span>其他</span>
+                                        </t>
                                     </td>
                                 </tr>
                             </t>

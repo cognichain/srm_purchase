@@ -72,7 +72,7 @@
                                         <span t-field="order_id.amount_total"
                                               t-options='{"widget": "monetary", "display_currency": order_id.currency_id}'/>
                                     </td>
-                                    <td>
+                                    <td id="purchase_order_state">
                                         <span t-field="order_id.state"/>
                                     </td>
                                 </tr>
