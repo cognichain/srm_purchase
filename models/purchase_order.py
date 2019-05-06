@@ -2,8 +2,6 @@
 
 from odoo import api, fields, models, exceptions
 
-#from ..scenter.purchase_order import PurchaseOrderDao
-
 
 class PurchaseOrder(models.Model):
     _name = "purchase.order"
@@ -17,42 +15,7 @@ class PurchaseOrder(models.Model):
         'cancel': [('readonly', True)],
     }
 
-    slug = fields.Char('平台关联slug')
     state = fields.Selection(selection_add=[('pending', '待确认'), ('refuse', '已拒绝')])
-
-    #submit_btn_show = fields.Boolean('是否显示提交审批按钮', compute='_compute_submit_btn_show')
-    #approval_button_show = fields.Boolean('是否显示审批按钮', compute='_compute_approval_btn_show')
-    #approval_log_show = fields.Boolean('是否显示审批记录按钮', compute='_compute_approval_log_show')
-
-    @api.model
-    def _is_use_platform(self):
-        ICPSudo = self.env['ir.config_parameter'].sudo()
-        po_2_platform = ICPSudo.get_param('srm_purchase.po_2_platform', default=False)
-        return po_2_platform
-
-    # @api.multi
-    # def button_approve(self, force=False):
-    #     self.write({'state': 'pending', 'date_approve': fields.Date.context_today(self)})
-    #     self.action_push_2_platform()
-    #     return {}
-
-    @api.multi
-    def button_cancel(self):
-        super(PurchaseOrder, self).button_cancel()
-        if self.slug and self._is_use_platform():
-            PurchaseOrderDao(self.env).update(self.slug, {'state': 'cancel'})
-
-    @api.multi
-    def button_unlock(self):
-        super(PurchaseOrder, self).button_unlock()
-        if self.slug and self._is_use_platform():
-            PurchaseOrderDao(self.env).update(self.slug, {'state': 'purchase'})
-
-    @api.multi
-    def action_submit(self):
-        self.create_approval_workflow()
-        self.write({'state': 'to approve'})
-        return True
 
     @api.multi
     def _ship_create_picking(self, vals):
@@ -87,14 +50,21 @@ class PurchaseOrder(models.Model):
         return True
 
     @api.multi
+    def _create_picking(self):
+        """
+        重写采购模块内创建送货方法。
+        原：采购订单确认订单时，会创建送货信息。
+        现：不自动创建收货信息，改为供应商填送货后，创建对应的送货信息。
+        """
+        pass
+
+    @api.multi
     def button_done(self):
         self.ensure_one()
         for line in self.order_line:
             if line.product_qty != line.qty_received:
                 raise exceptions.ValidationError('未发货完毕不能锁定该采购单！')
         res = super(PurchaseOrder, self).button_done()
-        if self.slug and self._is_use_platform():
-            PurchaseOrderDao(self.env).update(self.slug, {'state': 'done'})
         return res
 
     @api.multi
@@ -119,103 +89,16 @@ class PurchaseOrder(models.Model):
         return result
 
     @api.multi
-    def action_push_2_platform(self):
-        """
-        推送采购单数据到公共平台
-        :return:
-        """
-        self.ensure_one()
-        if self._is_use_platform():
-            data = {
-                'id': self.id,
-                'no': self.name,
-                'state': 'pending',
-                'order_time': self.date_order,
-                'company': self.company_id.name,
-                'total': self.amount_total,
-                'currency_symbol': self.currency_id.symbol,
-                'currency_name': self.currency_id.name,
-                'scenter_slug': self.partner_id.scenter_slug
-            }
-            r = PurchaseOrderDao(self.env).create(data)
-            slug = r.get('slug', None)
-            if slug:
-                return self.write({'slug': slug})
-            else:
-                raise exceptions.ValidationError('采购订单推送失败')
-        return True
-
-    @api.multi
     def action_accept(self):
         self.ensure_one()
         self.write({'state': 'purchase'})
-        if self.slug and self._is_use_platform():
-            PurchaseOrderDao(self.env).update(self.slug, {'state': 'purchase'})
         return True
 
     @api.multi
     def action_refuse(self):
         self.ensure_one()
         self.write({'state': 'refuse'})
-        if self.slug and self._is_use_platform():
-            PurchaseOrderDao(self.env).update(self.slug, {'state': 'refuse'})
         return True
-
-    # -*- 审批流相关逻辑 -*-
-    @api.model
-    def use_approval_config(self):
-        """
-        获取是否启用审批流的配置
-        :return:
-        """
-        ICPSudo = self.env['ir.config_parameter'].sudo()
-        return ICPSudo.get_param('srm_purchase.use_approval_workflow', default=False)
-
-    @api.depends('state')
-    @api.multi
-    def _compute_submit_btn_show(self):
-        self.ensure_one()
-        if any([self.state not in ['draft', 'sent'], not self.use_approval_config()]):
-            self.submit_btn_show = False
-        else:
-            self.submit_btn_show = True
-
-    #@api.depends('state', 'approval_workflow_id')
-    @api.multi
-    def _compute_approval_btn_show(self):
-        self.ensure_one()
-        if any([self.state != 'to approve', not self.use_approval_config(), self.done, not self.approval_workflow_id]):
-            self.approval_button_show = False
-        else:
-            if self.node_id.check_approval_access():
-                self.approval_button_show = True
-            else:
-                self.approval_button_show = False
-
-    #@api.depends('approval_workflow_id')
-    @api.multi
-    def _compute_approval_log_show(self):
-        self.ensure_one()
-        if not (self.use_approval_config() and self.approval_workflow_id):
-            self.approval_log_show = False
-        else:
-            self.approval_log_show = True
-
-    @api.model
-    def _get_approval_strategy(self):
-        """
-        重写覆盖原有的审批策略获取逻辑
-        :return:
-        """
-        return self.env.ref('srm_purchase.default_purchase_approval_workflow')
-
-    @api.multi
-    def approval_finish(self, is_pass, remark=''):
-        self.ensure_one()
-        if is_pass:
-            self.button_approve()
-        else:
-            self.button_cancel()
 
     @api.multi
     def button_confirm(self):
@@ -265,12 +148,3 @@ class PurchaseOrder(models.Model):
 
     def return_approval_window(self):
         return self.get_approval_strategy().action_approval_window()
-
-    @api.multi
-    def _create_picking(self):
-        """
-        重写采购模块内创建送货方法。
-        原：采购订单确认订单时，会创建送货信息。
-        现：不自动创建收货信息，改为供应商填送货后，创建对应的送货信息。
-        """
-        pass
